@@ -1,0 +1,52 @@
+﻿using System;
+using System.IO;
+using System.Linq;
+using System.Drawing;
+using System.Windows.Forms;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+namespace SignalWorkbench {
+public class FilterUI:UserControl {
+ Dictionary<string,Control> fields=new Dictionary<string,Control>();Dictionary<string,Panel> rows=new Dictionary<string,Panel>();
+ FlowLayoutPanel parameters;TabControl tabs;PlotPanel magnitude=new PlotPanel(),phase=new PlotPanel(),impulse=new PlotPanel(),input=new PlotPanel(),output=new PlotPanel();
+ TextBox report=new TextBox();DataGridView grid=new DataGridView();Label note;Button estimate;double[] imported;bool loading;public FilterResult Result;public event Action StateChanged;public Func<string> DirectoryPath;public Action<string> SavedDirectory;
+ public bool Ready{get{return Result!=null&&Result.StableQ;}}
+ public FilterUI(){Dock=DockStyle.Fill;BackColor=Color.White;AutoScaleMode=AutoScaleMode.Inherit;
+  var root=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=1};root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,32));root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,68));Controls.Add(root);
+  parameters=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,Padding=new Padding(10)};root.Controls.Add(parameters,0,0);
+  Choice("Structure","结构",new[]{"FIR","IIR"},new[]{"FIR · 窗函数法","IIR · 二阶节 SOS"});
+  Choice("Response","响应类型",new[]{"Lowpass","Highpass","Bandpass","Bandstop"},new[]{"低通","高通","带通","带阻"});
+  Choice("Method","IIR 设计方法",new[]{"Butterworth","ChebyshevI","ChebyshevII"},new[]{"Butterworth","Chebyshev I · 通带等纹波","Chebyshev II · 阻带等纹波"});
+  Edit("Fs","采样率 Fs（Hz）");Edit("F1","边缘频率 F1（Hz，定义见说明）");Edit("F2","第二边缘 F2（Hz）");Edit("Order","阶数（IIR 带通/带阻为原型阶数）");
+  Choice("Window","FIR 对称窗",Engine.Windows,Engine.Windows);Edit("WindowParameter","窗参数 β / α / σ（样本）");Choice("Scale","FIR 通带增益归一化",new[]{"True","False"},new[]{"启用","关闭"});
+  Edit("Ripple","Chebyshev I 通带纹波 Rp（dB）");Edit("Attenuation","阻带衰减 Rs / Kaiser 估算（dB）");Edit("Transition","Kaiser 估算过渡带宽（Hz）");
+  estimate=new Button{Text="估算 Kaiser 阶数与 β",Height=38,AutoSize=false};parameters.Controls.Add(estimate);estimate.Click+=delegate{try{var s=Read();double beta;int order=Filters.KaiserOrder(s,out beta);Set("Order",order);Set("Window","Kaiser");Set("WindowParameter",beta);note.Text="Kaiser 经验估算已填入；请检查实际频响，不保证自动满足全部指标。";}catch(Exception ex){Error(ex);}};
+  Edit("Width","系数位宽 W（2～32 bit，有符号）");Edit("Fraction","小数位 F（0～W-1）");Choice("Rounding","舍入",new[]{"Even","Truncate","Floor"},new[]{"最近偶数","向零截断","向负无穷取整"});Choice("Overflow","溢出处理",new[]{"Error","Saturate"},new[]{"报错并阻止导出","饱和并统计"});
+  Choice("Format","目标文件",new[]{"FIR COE","ROM COE","Altera MIF"},new[]{"Vivado FIR Compiler · COE","Vivado ROM 系数表 · COE","Altera / Intel · MIF"});
+  Choice("TestSignal","测试信号",new[]{"TwoTone","Impulse","Step","Imported"},new[]{"双正弦叠加","单位脉冲","单位阶跃","导入 CSV / TXT"});Edit("SignalLength","测试点数（16～65536）");Edit("Tone1","测试频率 1（Hz）");Edit("Tone2","测试频率 2（Hz）");Edit("InputColumn","导入数据列（从 1 开始）");
+  var import=new Button{Text="导入 CSV / TXT 信号",Height=38};parameters.Controls.Add(import);import.Click+=delegate{try{using(var d=new OpenFileDialog{Filter="信号数据|*.csv;*.txt|所有文件|*.*"})if(d.ShowDialog(this)==DialogResult.OK){var data=Filters.ReadSignal(d.FileName,Read().InputColumn);imported=data;Set("TestSignal","Imported");InvalidateResult();note.Text="已导入 "+data.Length+" 点："+Path.GetFileName(d.FileName);}}catch(Exception ex){Error(ex);}};
+  var exportSignal=new Button{Text="导出滤波前后数据 CSV",Height=38};parameters.Controls.Add(exportSignal);exportSignal.Click+=delegate{Export("signal");};
+  note=new Label{Text="设置后点击底部“计算预览”。",Height=110,ForeColor=Color.DarkSlateGray};parameters.Controls.Add(note);
+  tabs=new TabControl{Dock=DockStyle.Fill};root.Controls.Add(tabs,1,0);Add("幅频 dB",magnitude);Add("相频 °",phase);Add("脉冲响应",impulse);Add("输入信号",input);Add("滤波输出",output);
+  grid.Dock=DockStyle.Fill;grid.ReadOnly=true;grid.AllowUserToAddRows=false;grid.RowHeadersVisible=false;grid.BackgroundColor=Color.White;grid.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill;foreach(var name in new[]{"节/抽头","系数","原始值","量化值","整数码"})grid.Columns.Add(name,name);Add("系数表",grid);
+  report.Multiline=true;report.ReadOnly=true;report.ScrollBars=ScrollBars.Vertical;report.Dock=DockStyle.Fill;Add("计算说明",report);
+  parameters.Resize+=delegate{Fit();};Apply(new FilterSettings());Fit();
+ }
+ void Add(string title,Control content){var page=new TabPage(title);page.Controls.Add(content);tabs.TabPages.Add(page);}
+ bool fitting;void Fit(){if(fitting)return;fitting=true;try{foreach(Control c in parameters.Controls)c.Width=Math.Max(140,parameters.ClientSize.Width-parameters.Padding.Horizontal-SystemInformation.VerticalScrollBarWidth-12);}finally{fitting=false;}}
+ void Row(string key,string title,Control c){var p=new Panel{Height=65,Margin=new Padding(3)};var label=new Label{Text=title,Dock=DockStyle.Top,Height=26,ForeColor=Color.SlateGray};c.Dock=DockStyle.Bottom;p.Controls.Add(c);p.Controls.Add(label);parameters.Controls.Add(p);fields[key]=c;rows[key]=p;c.AccessibleName=title;}
+ void Edit(string key,string title){var t=new TextBox();Row(key,title,t);t.TextChanged+=delegate{if(key=="InputColumn"&&!loading)imported=null;InvalidateResult();};}
+ class Item{public string Key,Name;public override string ToString(){return Name;}}
+ void Choice(string key,string title,string[] values,string[] names){var c=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList};for(int i=0;i<values.Length;i++)c.Items.Add(new Item{Key=values[i],Name=names[i]});c.SelectedIndex=0;Row(key,title,c);c.SelectedIndexChanged+=delegate{if(!loading&&key=="Structure"){Set("Order",Key("Structure")=="IIR"?4:64);Set("Format",Key("Structure")=="IIR"?"ROM COE":"FIR COE");}if(!loading&&key=="Window")Set("WindowParameter",Key("Window")=="Tukey"?.5:Key("Window")=="Gaussian"?16:8.6);InvalidateResult();};}
+ string Key(string key){var c=fields[key] as ComboBox;return c==null?fields[key].Text:((Item)c.SelectedItem).Key;}
+ void Set(string key,object value){string text=Convert.ToString(value,Engine.CI);var c=fields[key] as ComboBox;if(c==null)fields[key].Text=text;else{foreach(Item i in c.Items)if(i.Key==text){c.SelectedItem=i;return;}throw new ArgumentException("未知选项："+text);}}
+ public FilterSettings Read(){var s=new FilterSettings();foreach(var f in typeof(FilterSettings).GetFields()){if(fields.ContainsKey(f.Name)){try{f.SetValue(s,Convert.ChangeType(Key(f.Name),f.FieldType,Engine.CI));}catch{throw new ArgumentException(fields[f.Name].AccessibleName+"：数值格式无效。");}}}return s;}
+ public void Apply(FilterSettings s){loading=true;try{foreach(var f in typeof(FilterSettings).GetFields())if(fields.ContainsKey(f.Name))Set(f.Name,f.GetValue(s));}finally{loading=false;}InvalidateResult();}
+ void InvalidateResult(){if(loading||note==null)return;Result=null;grid.Rows.Clear();report.Clear();foreach(var p in new[]{magnitude,phase,impulse,input,output})p.Set(null,null,"参数已改变，请重新计算","",1);note.Text="设置后点击底部“计算预览”。";bool fir=Key("Structure")=="FIR";estimate.Visible=fir;foreach(var k in new[]{"Window","Scale","Transition"})rows[k].Visible=fir;rows["WindowParameter"].Visible=fir&&new[]{"Kaiser","Tukey","Gaussian"}.Contains(Key("Window"));rows["Method"].Visible=!fir;rows["Ripple"].Visible=!fir&&Key("Method")=="ChebyshevI";rows["Attenuation"].Visible=fir||Key("Method")=="ChebyshevII";rows["F2"].Visible=Key("Response").StartsWith("Band");foreach(var k in new[]{"Tone1","Tone2"})rows[k].Visible=Key("TestSignal")=="TwoTone";rows["InputColumn"].Visible=Key("TestSignal")=="Imported";if(StateChanged!=null)StateChanged();}
+ public async Task Calculate(){var s=Read();Filters.Validate(s);var data=imported;Result=await Task.Run(()=>Filters.Design(s,data));var r=Result;double step=s.Fs/2/(Filters.Grid-1);magnitude.Set(r.Magnitude,r.StableQ?r.MagnitudeQ:null,"蓝：浮点 / 橙：量化系数 · 绝对增益 dB","Hz",step);phase.Set(r.Phase,r.StableQ?r.PhaseQ:null,"展开相位 · 零响应处无定义","Hz",step);impulse.Set(r.Impulse,r.StableQ?r.ImpulseQ:null,"蓝：浮点 / 橙：量化系数 · 零初态","样本 n",1);input.Set(r.Input,null,"输入信号","时间 s",1/s.Fs);output.Set(r.Output,r.StableQ?r.OutputQ:null,"蓝：浮点 / 橙：量化系数 · double 运算","时间 s",1/s.Fs);report.Text=r.Report;grid.Rows.Clear();for(int i=0;i<r.Codes.Values.Length;i++)grid.Rows.Add(r.Fir!=null?i:i/5,r.Fir!=null?"h["+i+"]":new[]{"b0","b1","b2","a1","a2"}[i%5],Engine.F(r.Codes.Values[i]),Engine.F(r.Codes.Decoded[i]),r.Codes.Integers[i]);note.Text="实际阶数："+r.ActualOrder+"\r\n最大系数量化误差："+r.Codes.MaxError.ToString("G5")+"\r\n量化稳定："+r.StableQ+"；饱和系数："+r.Codes.Saturated;if(StateChanged!=null)StateChanged();}
+ public void Export(string kind){try{Filters.Require(Ready,"请先计算；量化后不稳定的结果不能导出。");if(Result.Codes.Saturated>0&&MessageBox.Show(this,"有系数发生饱和，响应已改变，仍要导出？","饱和系数",MessageBoxButtons.YesNo)!=DialogResult.Yes)return;string format=Result.Config.Format,ext=kind=="coeff"||kind=="signal"?"csv":format=="Altera MIF"?"mif":"coe";string dir=DirectoryPath();if(dir==null)return;using(var d=new SaveFileDialog{Filter=ext.ToUpper()+" 文件|*."+ext,DefaultExt=ext,AddExtension=true,InitialDirectory=dir,FileName=Result.Config.Structure+"_"+Result.Config.Response+"_"+kind+"."+ext})if(d.ShowDialog(this)==DialogResult.OK){Filters.Require(string.Equals(Path.GetExtension(d.FileName),"."+ext,StringComparison.OrdinalIgnoreCase),"扩展名应为 ."+ext);if(kind=="coeff")Filters.ExportCoefficients(d.FileName,Result);else if(kind=="signal")Filters.ExportSignal(d.FileName,Result);else Filters.ExportCoe(d.FileName,Result,format);SavedDirectory(Path.GetDirectoryName(d.FileName));note.Text="已导出："+d.FileName;}}catch(Exception ex){Error(ex);}}
+ public void Save(){try{var s=Read();Filters.Validate(s);var dir=DirectoryPath();if(dir==null)return;using(var d=new SaveFileDialog{Filter="滤波参数 XML|*.xml",DefaultExt="xml",InitialDirectory=dir,FileName="filter_settings.xml"})if(d.ShowDialog(this)==DialogResult.OK){s.Save(d.FileName);SavedDirectory(Path.GetDirectoryName(d.FileName));}}catch(Exception ex){Error(ex);}}
+ public void LoadParameters(){using(var d=new OpenFileDialog{Filter="滤波参数 XML|*.xml"})if(d.ShowDialog(this)==DialogResult.OK)try{var s=FilterSettings.Load(d.FileName);Filters.Validate(s);Apply(s);imported=null;note.Text="参数已载入；外部信号需重新导入。";}catch(Exception ex){Error(ex);}}
+ void Error(Exception ex){MessageBox.Show(this,ex.Message,"滤波参数检查",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+}
+}

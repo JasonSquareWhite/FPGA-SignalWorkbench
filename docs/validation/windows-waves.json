@@ -1,0 +1,19 @@
+{
+  "status": "PASS",
+  "reference": "SciPy 1.18.1, NumPy 2.5.4",
+  "window_configurations": 324,
+  "window_samples": 43200,
+  "maximum_absolute_window_error": 6.217248937900877e-15,
+  "worst_case": [
+    "Kaiser",
+    1024,
+    false,
+    50.0
+  ],
+  "tolerance": "atol=3e-14, rtol=3e-14",
+  "independent_coe_checks": "12 radix/width cases + Hann/sine examples; all words exactly equal",
+  "wave_configurations": 432,
+  "wave_samples": 159120,
+  "maximum_absolute_wave_error": 6.661338147750939e-16,
+  "scope": "Numerical/format verification; Vivado integration recorded separately."
+}

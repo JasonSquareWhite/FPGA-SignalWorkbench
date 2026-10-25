@@ -1,0 +1,16 @@
+; SignalWorkbench 1.1 | ROM/RAM initialization, NOT FIR Compiler coefficients
+; N=10 DEPTH=10 WIDTH=18 FRACTION=16 ENCODING=Signed
+; SOURCE=IIR_SOS_[b0,b1,b2,a1,a2]_a0=1 COEFFICIENT_SCALE=2^F; IIR feedback subtracts a1,a2
+; ROUNDING=Even OVERFLOW=Error SATURATED=0 MAX_ABS_ERROR=7.2819613711194719E-06
+memory_initialization_radix=16;
+memory_initialization_vector=
+01422,
+02844,
+01422,
+2FC05,
+047B2,
+0120A,
+02414,
+0120A,
+2B68D,
+09F43;

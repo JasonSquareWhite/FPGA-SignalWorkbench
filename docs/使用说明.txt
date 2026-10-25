@@ -1,0 +1,158 @@
+﻿FPGA 信号与系数工作台 1.1.1 — Vivado 优先轻量版
+
+启动与文件
+双击 SignalWorkbench.exe。请保留同目录的 SignalWorkbench.exe.config，以启用高 DPI 清晰显示。
+需要 Windows 10/11 和 .NET Framework 4.8（本机已安装）。无需安装 Python、SciPy 或额外绘图库。
+docs 为说明，examples 为经过验证的示例。源代码和测试位于完整项目的 src、tests、validation 中，不需要随便携程序分发。
+
+快速使用
+1. 选“窗函数”或“波形生成”。
+2. 设置点数 N、存储深度以及相应参数。深度必须 ≥ N，多余位置填数值零。
+3. 右侧选择平台、位宽 W、小数位 F、编码、进制和舍入规则。
+4. 点击“计算预览”，检查曲线、实际最值、误差和饱和点数。
+5. 在底部“保存位置”填写完整目录，或点“选择文件夹”。
+6. 点“导出 COE”，在保存对话框确认文件名。保存对话框默认打开上述位置。
+7. 导出后程序逐点回读校验；状态栏显示实际路径。“打开目录”可直接查看。
+
+保存位置
+默认 D:\FPGA（若该盘不存在则使用程序所在文件夹）。允许中文和空格。
+手动填写的新目录在导出时创建。请选择完整绝对路径，不接受相对路径。
+选择文件夹或成功保存后，最近路径记入程序旁的 output-location.txt；目录只读时本次仍可导出，但可能无法跨启动记忆。
+保存位置的变化不会使计算结果失效；数值参数的变化会清空旧预览并禁用导出，须重新计算。
+
+Vivado 中的用法
+当前 COE 用于 ROM/RAM 初始化，已在 Vivado 2022.2 的 Block Memory Generator 8.4 通过仿真验证。
+在 Block Memory Generator 中设置所需 Memory Type、与软件一致的深度和位宽；在初始化选项启用 Load Init File 并选择 COE，然后生成 IP。
+软件的 W=16、Depth=1024 对应 1024 个 16-bit 存储字；深度不是字节数。
+COE 不会替你配置 IP 位宽、小数位或 signed 类型。FPGA 端必须按本软件选择的编码和 F 解释数据。
+本软件生成的 memory_initialization_vector 不适用于直接替代 FIR Compiler 所需的 COEFDATA 文件。
+不需要生成 bitstream 或连接开发板就能制作这些初始化文件。
+
+位宽、数值和码字
+输入的是量化前的数值 x；整数码 q = R(x × 2^F)，R 由舍入选项确定。
+要直接使用整数幅度（例如 0～4095），请设 F=0，并选择合适的无符号位宽。
+有符号补码范围：q ∈ [-2^(W-1), 2^(W-1)-1]。
+无符号范围：q ∈ [0, 2^W-1]。
+偏移二进制的数值范围与有符号相同，输出存储字为 q+2^(W-1)。
+补码存储字为 q mod 2^W。即使选择十进制，输出也表示存储位模式，负数不会以负号写入 ROM 文件。
+例如 W=8,F=7 时，-1 → 80（HEX），0 → 00，0.5 → 40。
+W=16,F=15 的最大正数是 32767/32768=0.999969482421875，不能精确表示 +1。
+默认窗增益为 32767/32768，便于把非负单位峰值窗存入该格式；可以自行修改。
+有些窗（例如 Flat-top）含负旁瓣，不能直接使用无符号数而不改变信号。
+
+舍入与溢出
+最近偶数舍入：恰好位于半整数时取最近的偶数；0.5→0，1.5→2，-1.5→-2。
+向零截断：正负值都朝零取整。向负无穷取整：例如 -1.2→-2。
+先进行选定舍入，再检查整数码范围。默认溢出时报错，阻止导出。
+选“饱和”时将超出范围的整数码钳位到边界，显示点数，并在导出前要求确认；饱和意味着信号发生改变。
+
+窗函数及定义
+支持矩形、Hann、Hamming、Blackman、四项 Blackman-Harris、Nuttall、Bartlett、Bartlett-Hann、Flat-top、Kaiser、Tukey、Gaussian。
+采样索引 n=0…N-1。设 D=N-1（对称）或 D=N（周期），t=n/D。
+周期方式等价于先生成 N+1 点对称窗，再删除最后一点；这是频谱分析中常见的周期窗定义。
+对称窗常用于 FIR 设计；周期窗常用于频谱分析，两者不能视为相同数据。
+偶数 N 的原始对称 Hann 窗最大样本通常略小于 1，这是定义的结果。
+
+广义余弦窗：w[n] = Σ(k=0…K) (-1)^k a[k] cos(2πkt)。
+系数 a：
+矩形：1
+Hann：0.5, 0.5
+Hamming：0.54, 0.46
+Blackman：0.42, 0.5, 0.08
+Blackman-Harris：0.35875, 0.48829, 0.14128, 0.01168
+Nuttall：0.3635819, 0.4891775, 0.1365995, 0.0106411
+Flat-top：0.21557895, 0.41663158, 0.277263158, 0.083578947, 0.006947368
+
+Bartlett：1-|2t-1|。
+Bartlett-Hann：0.62-0.48|t-0.5|-0.38cos(2πt)。
+Kaiser：I0(β√(1-(2t-1)^2))/I0(β)，β范围0～50。I0 用收敛幂级数计算。
+Gaussian：exp(-0.5((n-D/2)/σ)^2)，σ以样本数为单位。
+Tukey：α=0为矩形，α=1为Hann；0<α<1时：
+ t<α/2：0.5[1+cos(π(2t/α-1))]；
+ α/2≤t≤1-α/2：1；
+ t>1-α/2：0.5[1+cos(π(2t/α-2/α+1))]。
+对理论为零的部分窗端点消除浮点计算残差；保留真正的负旁瓣和高斯小数值。
+
+归一化
+“原始定义”不附加缩放；其他方式分别除以 max|w|、Σw、sqrt(Σw²/N)。
+归一化后再乘窗增益。分母为零或过小时拒绝计算，不能给全零短窗伪造单位峰值。
+不对窗系数自动平移到正数范围，避免改变窗的频谱性质。
+
+波形定义
+支持正弦、余弦、三角、方波、上升/下降锯齿、直流、周期脉冲。
+令 p=frac(C n/N + φ/360)，C为记录内周期数，φ为度。
+频率方式中 C=fN/Fs；周期数方式中 f=CFs/N。时间 t[n]=n/Fs，不重复复制周期终点。
+正弦单位波 u=(1+sin(2πp))/2；余弦用 cos。
+方波/周期脉冲：p<d 时 u=1，否则0，d为占空比。
+三角波：p<d 时 u=p/d，否则 u=(1-p)/(1-d)，d为上升段比例。
+上升锯齿 u=p，下降锯齿 u=1-p；直流 u=1。
+输出 x=min+(max-min)u。直流只使用最大值；仍要求 min≤max。
+这里的最大/最小值是定义幅度，并不保证离散采样恰好落在峰值上；实际最值见统计。
+非整数周期可能造成循环播放时边界跳变。基波须在 (0,Fs/2) 内。
+方波、三角、锯齿和脉冲是理想波形采样，未经带限；其谐波可能混叠，不承诺为无混叠模拟波形。
+可在波形量化前乘以选定窗函数（含其归一化与增益）。
+
+曲线和数据
+蓝线是浮点原始数值，橙线是量化后还原数值；精度较高时两条线会重合。
+滚轮缩放横轴，双击复位，悬停显示样本值。
+大数据量绘图按屏幕列保留最小/最大值；只有显示抽稀，导出包含全部数据。
+频谱使用全部 N 个原始样本，补零到不小于 max(N,4096) 的2次幂。
+显示20log10(|FFT|/max|FFT|)，下限-160 dB；这是峰值归一化幅度谱，不是PSD或绝对功率。
+窗口页横轴为cycles/sample；波形页为Hz。零序列显示全部-160 dB表示显示下限。
+统计量只覆盖 N 个有效样本，存储深度中多出的补零不参与统计。
+CSV包含源值、还原值、整数码、HEX和是否补零。文件预览仅显示前128字，正式导出不截断。
+
+范围与当前版本边界
+点数2～1,048,576；深度N～1,048,576；位宽1～32 bit。
+有符号/偏移二进制F=0…W-1；无符号F=0…W。
+Kaiser β≤50是本实现的受测范围，不表示数学定义只能到50。
+Altera MIF已实现并做格式回读；尚未进行Quartus实际导入验证。
+1.1 已实现滤波器页，使用方法和适用边界见文末。
+Dolph-Chebyshev窗、扫频、噪声、图片转换和IP专用滤波器格式未纳入当前首版。
+
+科学依据与复核
+窗函数定义及系数以 SciPy signal.windows 的公开文档和独立数值实现为对照：
+https://docs.scipy.org/doc/scipy/reference/signal.windows.html
+https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.windows.hann.html
+https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.windows.kaiser.html
+https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.windows.tukey.html
+Vivado初始化文件规范：AMD UG896 COE File Syntax
+https://docs.amd.com/r/en-US/ug896-vivado-ip/COE-File-Syntax
+高DPI配置依据：Microsoft .NET Framework Windows Forms High DPI Support
+https://learn.microsoft.com/en-us/dotnet/desktop/winforms/high-dpi-support-in-windows-forms
+具体测试覆盖范围和误差见“验证记录.txt”；有限测试不代表所有参数、所有芯片、所有版本均已验证。
+
+
+1.1 新增：滤波器设计与信号处理
+1. 点击“滤波器设计”。FIR 采用窗函数法；IIR 支持 Butterworth、Chebyshev I、Chebyshev II。
+2. 均支持低通、高通、带通、带阻。FIR 阶数=抽头数-1；IIR 带通/带阻最终阶数为原型阶数的两倍。
+3. Fs 是采样率，频率须低于 Fs/2。FIR 窗函数法边缘约为半幅（-6 dB），不能当作统一的 -3 dB 点；Butterworth 边缘是半功率点；Chebyshev I 使用通带边缘，II 使用阻带边缘。
+4. FIR 高通和带阻要求偶数阶。Kaiser 按衰减与过渡带估算阶数和 β，属于经验估算；其他窗的 Rs/过渡带字段仅用于此按钮，不改变手动设计。Gaussian 参数为样本标准差；Tukey 参数为 0～1；Kaiser β 为 0～50。
+5. 量化只支持有符号系数，q=round(h*2^F)。越界默认报错；选择饱和时会计数并在导出前确认。IIR 使用 SOS，每节存储顺序 [b0,b1,b2,a1,a2]，a0=1 隐含，不存入ROM。差分方程反馈为减去 a1*y[n-1]、a2*y[n-2]。
+6. 图形有幅频、展开相位、脉冲响应、输入、输出和系数表；蓝色浮点，橙色量化系数。幅频是绝对增益，显示下限 -160 dB。零响应处相位无定义；有限频率网格不是连续频率指标的严格证明。
+7. 双正弦、单位脉冲和单位阶跃可直接测试。也可导入 CSV/TXT，先选“导入”信号及数据列号（从1起），再点导入按钮。最多65536点，至少16点，支持逗号、空格、制表符分隔及一行标题，不支持复杂带分隔符的引号字段。空行和 # / ; 注释跳过；数值需有限。文件时间列不会自动推断采样率，须手动设置 Fs。改变数据列后须重新导入。
+8. “导出 CSV”输出系数表；左侧下方“导出滤波前后数据 CSV”输出输入和两套滤波结果。采用零初态、单向因果滤波，未补偿群延迟。只对系数量化，状态和累加使用 double，不能视为 FPGA 逐位仿真。
+9. IIR 量化后检查每节极点模，达到或超过1时禁用导出。稳定性只针对线性系数模型，不保证实际定点硬件无溢出或极限环。阶数1～12（带通/带阻最多24阶）；极端窄带/高阶可能数值不适定，须检查响应，优先降低阶数或提高精度。
+10. 保存参数与载入参数在滤波页使用独立 XML 格式；外部信号数据不嵌入参数文件，载入后重新导入。
+
+滤波文件与 Vivado 设置
+- “Vivado FIR Compiler · COE”：radix=10; coefdata=...，有符号十进制整数 q；仅适用于 FIR。选择 Integer Coefficients，位宽与软件 W 一致，避免再次自动归一化。整数 q 对应 h=q/2^F，所以整数模式的输出需按额外 F 个小数位解释（输入若有 Fin 小数位，则原始乘加结果有 Fin+F 小数位），或显式右移/舍入 F 位恢复原尺度。软件不会替你配置 IP 或输出位宽。
+- “Vivado ROM 系数表 · COE”：memory_initialization_vector 格式，用于 Block Memory Generator；IIR 表每节5个字，FIR 表按抽头顺序。硬件必须自己实现滤波运算。
+- “Altera / Intel · MIF”：同样仅为系数存储表，不是自动配置 Quartus 滤波 IP 的工程文件。位宽、深度、符号和小数位须与硬件一致。
+- IIR 不能导出为 FIR Compiler 系数；请选 ROM COE、MIF 或系数 CSV。
+- 本版未实现椭圆滤波器、Parks-McClellan 等波纹 FIR、IIR 自动最小阶数、零相位 filtfilt 或 HDL 生成，界面不把它们冒充为已支持。
+
+算法依据
+SciPy firwin: https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.firwin.html
+SciPy butter: https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.butter.html
+SciPy cheby1: https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.cheby1.html
+SciPy cheby2: https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.cheby2.html
+SciPy kaiserord: https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.kaiserord.html
+AMD FIR Compiler PG149（Filter Coefficient Data）：https://docs.amd.com/r/en-US/pg149-fir-compiler/Filter-Coefficient-Data
+FIR 使用对称窗乘理想 sinc 响应；IIR 从模拟原型经预畸变、频率变换、双线性变换获得数字零极点，并组合成实数二阶节。
+
+
+1.1.1 科学性复查修正
+Kaiser 在浮点阶段先检查估算阶数，超过2048或非有限结果直接报错，防止整数转换溢出。
+IIR 每个边缘到0和Fs/2的距离、带通/带阻的带宽，必须至少为 (Fs/2)*0.0001；这是本实现的数值支持范围，不是数字滤波的理论限制。极窄频带可考虑降低采样率或分级设计，但本软件不自动执行多速率设计。
+FIR脉冲响应显示全部抽头；IIR仅显示前512点，不能将其理解为完整无限响应。

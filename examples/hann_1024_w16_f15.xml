@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Settings xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <Version>1</Version>
+  <Mode>0</Mode>
+  <N>1024</N>
+  <Depth>1024</Depth>
+  <Width>16</Width>
+  <Fraction>15</Fraction>
+  <Radix>16</Radix>
+  <Window>Hann</Window>
+  <Wave>Sine</Wave>
+  <Normalization>Raw</Normalization>
+  <Encoding>Signed</Encoding>
+  <Rounding>Even</Rounding>
+  <Overflow>Error</Overflow>
+  <Platform>Vivado</Platform>
+  <AddWindow>None</AddWindow>
+  <Periodic>false</Periodic>
+  <FrequencyMode>false</FrequencyMode>
+  <Parameter>8.6</Parameter>
+  <Gain>0.999969482421875</Gain>
+  <Minimum>-0.8</Minimum>
+  <Maximum>0.8</Maximum>
+  <Cycles>4</Cycles>
+  <Frequency>4000</Frequency>
+  <SampleRate>1024000</SampleRate>
+  <Phase>0</Phase>
+  <Duty>0.5</Duty>
+</Settings>

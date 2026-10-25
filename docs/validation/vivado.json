@@ -1,0 +1,8 @@
+{
+  "date": "2026-10-25",
+  "version": "2022.2",
+  "rom_xsim": "PASS: all 2048 words match independent reference",
+  "fir_compiler": "7.2 signed integer COE imported; targets generated",
+  "fir_datapath_simulation": false,
+  "quartus_tested": false
+}

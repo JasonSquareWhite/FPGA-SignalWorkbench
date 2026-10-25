@@ -1,0 +1,74 @@
+﻿FPGA 信号与系数工作台 1.0 — 验证记录
+2026-10-22
+
+1. 数值独立对照：PASS
+参考：SciPy 1.18.1、NumPy 2.5.4，仅用于验证，不随软件打包。
+12种窗函数，324组配置，43,200个样本。
+覆盖N=2/3/4/5/16/17/64/65/1024、对称和周期；Kaiser β=0/8.6/50，Tukey α=0/0.25/1，Gaussian σ=0.25/5/128。
+最大绝对误差6.217248937900877e-15（Kaiser N=1024,β=50,对称）。
+判据：绝对及相对容差均3e-14。
+8类波形，432组配置，159,120个样本，含不同相位、周期数、占空比/上升比例。
+对照NumPy解析公式及SciPy三角波；最大绝对误差6.661338147750939e-16。
+
+2. 核心边界与文件回读：PASS
+25,552条断言，覆盖窗对称性、周期延拓、已知短序列、8/32-bit补码边界、无符号32-bit最大值、偏移码及补零、三种舍入、饱和/报错、零归一化、非法参数、频率/周期数等价和FFT已知频点。
+COE/MIF：2平台×3进制×4位宽回读一致。
+独立Python严格解析COE：12组位宽/进制组合以及Hann/正弦示例，所有整数存储字完全一致。
+1,048,576点生成测试通过；测试时约66ms（单次数值计算计时，不含FFT、界面、导出，不作性能保证）。
+
+3. 实际Vivado集成：PASS
+Vivado 2022.2；Block Memory Generator 8.4；Artix-7 xc7a35tcpg236-1独立测试工程。
+两个1024×16-bit Single Port ROM，分别载入Hann及正弦COE。
+成功生成IP并运行XSim行为仿真。
+仿真逐地址检查2048个存储字，与独立SciPy参考文件完全一致。
+日志标记：PASS: VIVADO_BMG_XSIM_ALL_2048_WORDS_MATCH_SCIPY
+没有连接或烧写开发板；没有改动用户已有Vivado工程。
+Vivado有GCC路径及预编译库路径提醒，但本次Verilog仿真完成并通过比较。
+本验证是行为仿真和文件导入验证，不是上板、时序或所有IP的兼容性证明。
+
+4. 界面与保存位置：PASS
+验证参数改变后清空旧数据并禁用导出、滤波器占位页禁用计算导出、参数方案往返。
+高清配置为PerMonitorV2；本机实测144 DPI（150%），字体10pt。
+侧栏无多余横向滚动条；布局随窗口宽度调整。
+保存位置拒绝相对路径；中文/含空格的新目录可创建并导出COE，回读通过。
+选择目录/成功保存后的路径记忆已验证。
+未逐一实测所有显示器组合及100%/125%/200%间动态切换。
+
+5. 可复核材料
+完整目录src：计算与界面源代码；build.ps1：使用系统.NET编译器编译。
+tests/results/self-test.txt：核心断言摘要。
+tests/results/independent-validation.json：独立数值结果。
+tests/verify_reference.py：独立对照脚本（运行需NumPy/SciPy）。
+tests/vivado_validate.tcl与rom_tb.v：集成测试（路径相对项目根目录）。
+validation/vivado.log：实际Vivado记录；validation/vivado/project：独立验证工程。
+
+完整重跑示例（开发用途）
+1. powershell -File build.ps1
+2. SignalWorkbench.exe --self-test tests/results
+3. SignalWorkbench.exe --reference reference.csv
+4. 在有NumPy/SciPy的Python中执行：python tests/verify_reference.py reference.csv
+5. Vivado批处理执行tests/vivado_validate.tcl，并确认日志中的PASS标记。
+GUI程序命令行执行时应等待进程结束再读取测试结果。
+
+
+1.1 滤波模块补充验证（2026-10-22）
+- C# 独立算法对照 SciPy 1.18.1：360组设计，含144组 FIR、216组 IIR。
+- FIR：12种窗、4种响应、阶数2/31/64/255（高通/带阻跳过奇数阶）。系数最大绝对差5.551115123125783e-16。
+- IIR：Butterworth、Chebyshev I/II；4种响应；原型阶数1/2/3/4/7/12；第一边缘500/5000/15000 Hz，Fs=48000 Hz，带宽3000 Hz。
+- 每组比较257点复频响和512点脉冲响应。最大复频响绝对差2.4948110244338295e-10，最大脉冲响应绝对差9.597786766735172e-09。系数容差1e-11，响应/脉冲容差1e-8。SOS的节配对与增益分布可以不同，因此比较传递响应，不逐项比较SOS系数。
+- 另测12种默认18bit/F16 IIR组合；全部稳定且可导出。奇数阶高通FIR拒绝、低精度IIR不稳定拒绝导出、CSV指定列/非有限数值拒绝、导入信号滤波及XML回读均通过。
+- UI自动测试：FIR/IIR计算、参数改变后失效、导出按钮状态、原窗函数/波形回归、中文保存路径。实际窗口检查已看到FIR低通响应和保存位置。
+- 原核心自测重新通过，25552断言（见tests/results/self-test.txt）。
+- Vivado 2022.2：FIR Compiler 7.2成功读取65抽头W18/F16整数COE，生成Synthesis/Simulation等目标。记录见validation/filter_vivado.log和validation/fir_vivado/import_pass.txt。本次新FIR检查未运行IP数据通路仿真；旧版ROM仿真结果仅适用于原窗/波形示例。
+- Quartus本次未运行；MIF经过本程序逐字回读检查。
+- 测试覆盖不能证明所有参数均无误；频率网格有限，实际FPGA应检查运算位宽、输出缩放、饱和和IIR极限环。
+
+
+1.1.1 复查（2026-10-25）
+复现并修正：Kaiser极窄过渡带估算溢出错误返回2阶；IIR截止0.001Hz/Fs48000时边缘增益0.713175而不是Butterworth理论0.707107；FIR1025抽头脉冲图只显示512点。
+新增143个边界断言，包含3个完整FIR脉冲长度（513/1025/2049）。
+126组IIR边界设计与SciPy在普通、对数、带边缘密集网格对照，最大复响应绝对差1.2833506161594298e-08，判据1e-6。
+360组原滤波设计回归通过；核心25552断言及UI测试通过。
+上述检查是有限覆盖，不是任何参数均准确或硬件逐位正确的证明。
+
+2026-10-25：在独立发布目录重新执行便携路径的Vivado ROM仿真，2048字全部匹配；FIR Compiler 7.2重新导入示例并生成目标成功，未执行FIR数据通路仿真。

@@ -1,0 +1,11 @@
+*.exe
+*.exe.config
+output-location.txt
+tests/results/
+/validation/
+.Xil/
+*.jou
+*.log
+__pycache__/
+.venv/
+dist/

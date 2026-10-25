@@ -1,0 +1,6 @@
+{
+  "designs": 360,
+  "max_fir_coefficient_error": 5.551115123125783e-16,
+  "max_complex_response_error": 2.4948110244338295e-10,
+  "max_impulse_error": 9.597786766735172e-09
+}

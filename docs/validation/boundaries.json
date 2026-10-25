@@ -1,0 +1,13 @@
+{
+  "designs": 126,
+  "max_complex_response_error": 1.2833506161594298e-08,
+  "worst_case": {
+    "case": "116",
+    "method": "ChebyshevII",
+    "response": "Highpass",
+    "order": "12",
+    "f1": "2.3999999999999999",
+    "f2": "4.8239999999999998"
+  },
+  "tolerance": 1e-06
+}
